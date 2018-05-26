@@ -4,32 +4,41 @@ import Data.String
 import Data.List
 import qualified Data.Set as Set
 
-data Term = Term String | BranchTerm String [Term] deriving Ord
+--data Term = Term String | BranchTerm String [Term] deriving Ord
 
-instance IsString Term where
-  fromString = Term
+class Term a where
+  prettyTerm :: a -> String
 
-instance Show Term where
-  show (Term s) = s
-  show (BranchTerm s l) = if length l == 2
-    then "{" ++ show (l !! 0) ++ s ++ show (l !! 1) ++ "}"
-    else s ++ show l
+data TextTerm = TextTerm String
 
-instance Eq Term where
-  (Term a) == (Term b) = a == b
-  (BranchTerm a xs) == (BranchTerm b ys) = a == b && xs == ys
-  _ == _ = False
+instance IsString a where
+  fromString = TextTerm
 
-main :: IO ()
-main = putStrLn . showProp . logicReduceQuantification $ testTerm
+instance Term TextTerm where
+  prettyTerm (TextTerm s) = s
+
+--instance Show Term where
+  --show (Term s) = s
+  --show (BranchTerm s l) = if length l == 2
+    --then "{" ++ show (l !! 0) ++ s ++ show (l !! 1) ++ "}"
+    --else s ++ show l
+
+--instance Eq Term where
+  --(Term a) == (Term b) = a == b
+  --(BranchTerm a xs) == (BranchTerm b ys) = a == b && xs == ys
+  --_ == _ = False
+
+hmain :: IO ()
+hmain = putStrLn . showProp . logicReduceQuantification $ testTerm
 
 testTerm :: Prop
 testTerm = ForAll (\_ -> Top)
 
-elementOf :: Term -> Term -> Prop
-elementOf x s = Judgement $ BranchTerm "∈" [x,s]
+data SomeSet = RuleSet Prop
 
-data Prop = ForAll (Term -> Prop) | Judgement Term | Equals Term Term | Top | LogicAnd Prop Prop | LogicNot Prop
+data ElementOf x = ElementOf x SomeSet
+
+data Prop t = ForAll (t -> Prop) | Judgement t | Top | LogicAnd Prop Prop | LogicNot Prop
 
 recurProp :: (Prop -> Prop) -> Prop -> Prop
 recurProp f (ForAll p) = f $ ForAll (f . p)
@@ -37,17 +46,17 @@ recurProp f (LogicAnd a b) = f $ LogicAnd (f a) (f b)
 recurProp f (LogicNot p) = f $ LogicNot (f p)
 recurProp _ p = p
 
-instance IsString Prop where
-  fromString = Judgement . Term
+instance IsString (Prop TextTerm) where
+  fromString = Judgement . TextTerm
 
 variables :: [String]
 variables = map (:[]) "xyzuvwabc"
 
-decidablyEqual :: Prop -> Prop -> Bool
+decidablyEqual :: Eq t => Prop t -> Prop t -> Bool
 decidablyEqual (Judgement a) (Judgement b) = a == b
 decidablyEqual Top Top = True
 decidablyEqual (LogicAnd a b) (LogicAnd c d) = decidablyEqual a c && decidablyEqual b d
-decidablyEqual (Equals a b) (Equals c d) = a == c && b == d
+--decidablyEqual (Equals a b) (Equals c d) = a == c && b == d
 decidablyEqual (LogicNot a) (LogicNot b) = decidablyEqual a b
 decidablyEqual _ _ = False
 
@@ -67,10 +76,10 @@ showProp = showProp' 0
     showProp' i (LogicNot (LogicAnd (LogicNot a) (LogicNot b))) = "(" ++ showProp' i a ++ "∨" ++ showProp' i b ++ ")"
     showProp' i (LogicNot (LogicAnd a (LogicNot b))) = "(" ++ showProp' i a ++ "⇒" ++ showProp' i b ++ ")"
     showProp' i (LogicNot p@(LogicAnd _ _)) = "¬" ++ showProp' i p
-    showProp' i (LogicNot (Equals a b)) = "(" ++ show a ++ "≠" ++ show b ++ ")"
+    --showProp' i (LogicNot (Equals a b)) = "(" ++ show a ++ "≠" ++ show b ++ ")"
     showProp' i (LogicNot p) = "¬(" ++ showProp' i p ++ ")"
-    showProp' i (Equals a b) | a == b = showProp' i Top
-    showProp' _ (Equals a b) = "(" ++ show a ++ "=" ++ show b ++ ")"
+    --showProp' i (Equals a b) | a == b = showProp' i Top
+    --showProp' _ (Equals a b) = "(" ++ show a ++ "=" ++ show b ++ ")"
   --show Bot = "⊥"
   --show (LogicOr a b) = show a ++ "∨" ++ show b
   --show (Exists b p) = "∃" ++ show b ++ "." ++ show p
@@ -143,8 +152,15 @@ forAllIn s f = ForAll $ \x -> impl (elementOf x s) (f x)
 extensionality :: Prop
 extensionality = forAllIn "Set" $ \a -> forAllIn "Set" $ \b -> iff (Equals a b) (ForAll $ \x -> iff (elementOf x a) (elementOf x b))
 
+data Equals x = Equals x x
+
 -- x impl y := yV-x
 --logicImply :: Prop
 --logicImply = ForAll "x" (ForAll "y" ()
   --where
     --stmt = Judgement (BranchTerm "Impl" ["x","y"])
+
+-- Representable stmt: xs -> For all x (nat) in xs (set of nat), x is even
+
+evenSet :: SomeSet -> Prop
+evenSet xs = ForAll $ \x -> (x `isIn` xs) ==> Even x
